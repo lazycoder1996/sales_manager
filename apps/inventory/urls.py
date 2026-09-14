@@ -26,7 +26,8 @@ from apps.inventory.views import (
     SellerPaymentListCreateView,
     SellerPaymentDetailView,
     DashboardView,
-    CompleteSaleView
+    CompleteSaleView,
+    AdditionalPurchaseCreateView
 )
 
 
@@ -138,6 +139,10 @@ urlpatterns = [
     path(
         "sales/complete/",
         CompleteSaleView.as_view(),
+    ),
+    path(
+        "sales/<uuid:sale_id>/purchases/",
+        AdditionalPurchaseCreateView.as_view(),
     ),
 
     # Sale lines

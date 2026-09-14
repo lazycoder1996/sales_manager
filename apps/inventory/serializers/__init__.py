@@ -12,7 +12,7 @@ from .seller import *
 from .seller_payment import *
 from .seller_payment_allocation import *
 from .dashboard import *
-
+from .additional_purchase import *
 
 __all__ = [
     "ProductSerializer",

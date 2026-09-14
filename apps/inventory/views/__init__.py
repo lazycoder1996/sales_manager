@@ -14,6 +14,7 @@ from .stock_detail import *
 from .seller import *
 from .seller_payment import *
 from .dashboard import *
+from .additional_purchase import *
 
 __all__ = [
     "ProductListCreateView",

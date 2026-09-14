@@ -1,6 +1,8 @@
+from django.db.models import Q
 from rest_framework.views import APIView
 
 from apps.core.responses import APIResponse
+from apps.core.responses.pagination import CursorPagination
 from apps.inventory.models import Sale
 from apps.inventory.serializers.complete_sale import CompleteSaleSerializer
 from apps.inventory.serializers.sale import SaleSerializer
@@ -19,13 +21,21 @@ class SaleListCreateView(APIView):
             )
         )
 
-        student_number = request.query_params.get(
-            "student_number"
-        )
+        search = request.query_params.get("search")
 
-        student_name = request.query_params.get(
-            "student_name"
-        )
+        if search:
+            sales = sales.filter(
+                Q(student_number__iexact=search)
+                | Q(student_name__icontains=search)
+            )
+
+        # student_number = request.query_params.get(
+        #     "student_number"
+        # )
+
+        # student_name = request.query_params.get(
+        #     "student_name"
+        # )
 
         payment_status = request.query_params.get(
             "payment_status"
@@ -35,17 +45,17 @@ class SaleListCreateView(APIView):
             "delivery_status"
         )
 
-        if student_number:
-            sales = sales.filter(
-                student_number__iexact=student_number
-            )
+        # if student_number:
+        #     sales = sales.filter(
+        #         student_number__iexact=student_number
+        #     )
 
-        if student_name:
-            sales = sales.filter(
-                student_name__icontains=student_name
-            )
+        # if student_name:
+        #     sales = sales.filter(
+        #         student_name__icontains=student_name
+        #     )
 
-        sales = list(sales)
+        # sales = list(sales)
 
         if payment_status:
             sales = [
@@ -63,25 +73,26 @@ class SaleListCreateView(APIView):
                 == delivery_status
             ]
 
-        if student_number:
-            if not sales:
-                return APIResponse.error(
-                    message="Sale not found.",
-                    status_code=404,
-                )
+        # if student_number:
+        #     if not sales:
+        #         return APIResponse.error(
+        #             message="Sale not found.",
+        #             status_code=404,
+        #         )
 
-            return APIResponse.success(
-                data=SaleSerializer(
-                    sales[0]
-                ).data,
-            )
-
-        return APIResponse.success(
-            data=SaleSerializer(
-                sales,
-                many=True,
-            ).data,
+        #     return APIResponse.success(
+        #         data=SaleSerializer(
+        #             sales[0]
+        #         ).data,
+        #     )
+        data = CursorPagination.paginate(
+            queryset=sales,
+            request=request,
+            serializer_class=SaleSerializer,
+            ordering="-sold_at",
         )
+
+        return APIResponse.success(data=data)
 
     def post(self, request):
         serializer = SaleSerializer(
