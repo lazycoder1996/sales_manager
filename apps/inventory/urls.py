@@ -27,7 +27,8 @@ from apps.inventory.views import (
     SellerPaymentDetailView,
     DashboardView,
     CompleteSaleView,
-    AdditionalPurchaseCreateView
+    AdditionalPurchaseCreateView,
+    TodaysSalesView,
 )
 
 
@@ -37,6 +38,11 @@ urlpatterns = [
         "dashboard/",
         DashboardView.as_view(),
         name="dashboard",
+    ),
+    path(
+        "dashboard/todays-sales/",
+        TodaysSalesView.as_view(),
+        name="dashboard-todays-sales",
     ),
 
     # Sellers

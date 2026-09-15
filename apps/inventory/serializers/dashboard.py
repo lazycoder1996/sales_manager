@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-
 class DashboardStockSerializer(serializers.Serializer):
     product_id = serializers.UUIDField()
     product = serializers.CharField()
@@ -42,6 +41,14 @@ class DashboardEarningSerializer(serializers.Serializer):
 class DashboardSalesSerializer(serializers.Serializer):
     count = serializers.IntegerField()
     total_value = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    cash = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    momo = serializers.DecimalField(
         max_digits=12,
         decimal_places=2,
     )
@@ -125,3 +132,23 @@ class DashboardSerializer(serializers.Serializer):
     )
     sellers = DashboardSellersSerializer()
     earnings = DashboardEarningsSerializer()
+
+
+class TodaysSalesSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    count = serializers.IntegerField()
+    total_value = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    cash = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    momo = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    # sales = SaleSerializer(
+    #     many=True,
+    # )

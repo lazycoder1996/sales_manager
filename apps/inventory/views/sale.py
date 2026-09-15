@@ -7,7 +7,8 @@ from apps.inventory.models import Sale
 from apps.inventory.serializers.complete_sale import CompleteSaleSerializer
 from apps.inventory.serializers.sale import SaleSerializer
 from apps.inventory.services.sale import SaleService
-
+from datetime import datetime, time
+from django.utils import timezone
 
 class SaleListCreateView(APIView):
 
@@ -28,7 +29,58 @@ class SaleListCreateView(APIView):
                 Q(student_number__iexact=search)
                 | Q(student_name__icontains=search)
             )
+        date_value = request.query_params.get("date")
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
 
+        if date_value:
+            try:
+                selected_date = datetime.strptime(
+                    date_value,
+                    "%Y-%m-%d",
+                ).date()
+            except ValueError:
+                return APIResponse.error(
+                    message="Invalid date. Use YYYY-MM-DD.",
+                    status_code=400,
+                )
+
+            sales = sales.filter(
+                sold_at__date=selected_date,
+            )
+
+        else:
+            if date_from:
+                try:
+                    start_date = datetime.strptime(
+                        date_from,
+                        "%Y-%m-%d",
+                    ).date()
+                except ValueError:
+                    return APIResponse.error(
+                        message="Invalid date_from. Use YYYY-MM-DD.",
+                        status_code=400,
+                    )
+
+                sales = sales.filter(
+                    sold_at__date__gte=start_date,
+                )
+
+            if date_to:
+                try:
+                    end_date = datetime.strptime(
+                        date_to,
+                        "%Y-%m-%d",
+                    ).date()
+                except ValueError:
+                    return APIResponse.error(
+                        message="Invalid date_to. Use YYYY-MM-DD.",
+                        status_code=400,
+                    )
+
+                sales = sales.filter(
+                    sold_at__date__lte=end_date,
+                )
         # student_number = request.query_params.get(
         #     "student_number"
         # )

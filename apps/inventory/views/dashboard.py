@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from apps.core.responses import APIResponse
 from apps.inventory.serializers.dashboard import (
     DashboardSerializer,
+    TodaysSalesSerializer,
 )
 from apps.inventory.services.dashboard import (
     DashboardService,
@@ -19,4 +20,17 @@ class DashboardView(APIView):
         return APIResponse.success(
             data=serializer.data,
             message="Dashboard retrieved successfully.",
+        )
+
+
+class TodaysSalesView(APIView):
+
+    def get(self, request):
+        data = DashboardService.get_todays_sales()
+
+        serializer = TodaysSalesSerializer(data)
+
+        return APIResponse.success(
+            data=serializer.data,
+            message="Today's sales retrieved successfully.",
         )

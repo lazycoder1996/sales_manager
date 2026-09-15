@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.utils import timezone
 
 from django.db.models import Sum
 
@@ -20,15 +21,33 @@ class DashboardService:
     @staticmethod
     def get_sales_summary():
         sales = Sale.objects.all()
+        payments = Payment.objects.all()
 
         total_value = Decimal("0")
 
         for sale in sales:
             total_value += SaleService.get_total(sale)
 
+        cash = (
+            payments.aggregate(
+                total=Sum("cash_amount"),
+            )["total"]
+            or Decimal("0")
+        )
+
+        momo = (
+            payments.aggregate(
+                total=Sum("momo_amount"),
+            )["total"]
+            or Decimal("0")
+        )
+
+
         return {
             "count": sales.count(),
             "total_value": total_value,
+            "cash": cash,
+            "momo": momo,
         }
 
     @staticmethod
@@ -256,6 +275,57 @@ class DashboardService:
             "cost": cost,
             "earnings": revenue - cost,
             "products": list(product_data.values()),
+        }
+
+    @staticmethod
+    def get_todays_sales():
+        today = timezone.localdate()
+
+        sales = (
+            Sale.objects
+            # .prefetch_related(
+            #     "lines",
+            #     "lines__product",
+            #     "lines__product_variant",
+            # )
+            .filter(
+                sold_at__date=today,
+            )
+            # .order_by(
+            #     "-sold_at",
+            #     "-created_at",
+            #     "-id",
+            # )
+        )
+        payments = Payment.objects.filter(
+            paid_at__date=today,
+        )
+
+        total_value = Decimal("0")
+
+        for sale in sales:
+            total_value += SaleService.get_total(sale)
+
+        cash = (
+            payments.aggregate(
+                total=Sum("cash_amount"),
+            )["total"]
+            or Decimal("0")
+        )
+        momo = (
+            payments.aggregate(
+                total=Sum("momo_amount"),
+            )["total"]
+            or Decimal("0")
+        )
+
+        return {
+            "date": today,
+            "count": sales.count(),
+            "total_value": total_value,
+            "cash": cash,
+            "momo": momo,
+            # "sales": sales,
         }
 
     @staticmethod
