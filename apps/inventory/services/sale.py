@@ -87,22 +87,14 @@ class SaleService:
     @staticmethod
     @transaction.atomic
     def create(
-        student_number,
-        student_name,
-        sold_at,
+        student=None,
+        student_number=None,
+        student_name="",
+        sold_at=None,
         notes="",
     ):
-        if Sale.objects.filter(
-            student_number=student_number
-        ).exists():
-            raise serializers.ValidationError({
-                "student_number": (
-                    "A sale already exists for "
-                    "this student."
-                )
-            })
-
         return Sale.objects.create(
+            student=student,
             student_number=student_number,
             student_name=student_name,
             sold_at=sold_at,
@@ -112,8 +104,7 @@ class SaleService:
     @staticmethod
     @transaction.atomic
     def create_with_payment(
-        student_number,
-        student_name,
+        student,
         sold_at,
         lines,
         cash_amount,
@@ -124,6 +115,7 @@ class SaleService:
         from apps.inventory.services.payment import (
             PaymentService,
         )
+
         from apps.inventory.services.sale_line import (
             SaleLineService,
         )
@@ -170,8 +162,21 @@ class SaleService:
                 )
             })
 
+        student_name = " ".join(
+            part
+            for part in [
+                student.firstname,
+                student.middlename,
+                student.surname,
+            ]
+            if part
+        )
+
         sale = SaleService.create(
-            student_number=student_number,
+            student=student,
+            student_number=(
+                student.admission_number
+            ),
             student_name=student_name,
             sold_at=sold_at,
             notes=notes,

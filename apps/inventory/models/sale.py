@@ -4,11 +4,20 @@ from apps.core.models import BaseModel
 
 
 class Sale(BaseModel):
-    student_number = models.CharField(
-        max_length=50,
-        unique=True,
+    student = models.ForeignKey(
+        "inventory.Student",
+        on_delete=models.PROTECT,
+        related_name="sales",
     )
 
+    # Kept temporarily for existing/historical sales.
+    student_number = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+    )
+
+    # Kept temporarily for existing/historical sales.
     student_name = models.CharField(
         max_length=255,
     )
@@ -27,6 +36,13 @@ class Sale(BaseModel):
         ]
 
     def __str__(self):
+        if self.student:
+            return (
+                f"{self.student.admission_number or ''} - "
+                f"{self.student.firstname} "
+                f"{self.student.surname}"
+            )
+
         return (
             f"{self.student_number} - "
             f"{self.student_name}"

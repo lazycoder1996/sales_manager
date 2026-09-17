@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from apps.inventory.models import Product
 from apps.inventory.models import ProductVariant
+from apps.inventory.models import Student
 
 
 class CompleteSaleLineSerializer(
@@ -27,12 +28,10 @@ class CompleteSaleLineSerializer(
 class CompleteSaleSerializer(
     serializers.Serializer
 ):
-    student_number = serializers.CharField(
-        max_length=50
-    )
-
-    student_name = serializers.CharField(
-        max_length=255
+    student = serializers.PrimaryKeyRelatedField(
+        queryset=Student.objects.filter(
+            is_active=True
+        )
     )
 
     sold_at = serializers.DateTimeField()
@@ -63,23 +62,3 @@ class CompleteSaleSerializer(
     )
 
     paid_at = serializers.DateTimeField()
-
-    def validate_student_number(self, value):
-        value = value.strip()
-
-        if not value:
-            raise serializers.ValidationError(
-                "Student number is required."
-            )
-
-        return value
-
-    def validate_student_name(self, value):
-        value = value.strip()
-
-        if not value:
-            raise serializers.ValidationError(
-                "Student name is required."
-            )
-
-        return value

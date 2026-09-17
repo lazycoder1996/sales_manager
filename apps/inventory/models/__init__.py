@@ -8,6 +8,8 @@ from .payment import Payment
 from .seller import *
 from .seller_payment import *
 from .seller_payment_allocation import *
+from .house import *
+from .student import *
 
 __all__ = [
     "Product",

@@ -1,20 +1,28 @@
+from datetime import datetime
+
 from django.db.models import Q
 from rest_framework.views import APIView
 
 from apps.core.responses import APIResponse
 from apps.core.responses.pagination import CursorPagination
 from apps.inventory.models import Sale
-from apps.inventory.serializers.complete_sale import CompleteSaleSerializer
-from apps.inventory.serializers.sale import SaleSerializer
-from apps.inventory.services.sale import SaleService
-from datetime import datetime, time
-from django.utils import timezone
+from apps.inventory.serializers.complete_sale import (
+    CompleteSaleSerializer,
+)
+from apps.inventory.serializers.sale import (
+    SaleSerializer,
+)
+from apps.inventory.services.sale import (
+    SaleService,
+)
+
 
 class SaleListCreateView(APIView):
 
     def get(self, request):
         sales = (
             Sale.objects
+            .select_related("student")
             .prefetch_related(
                 "lines",
                 "lines__product",
@@ -22,16 +30,43 @@ class SaleListCreateView(APIView):
             )
         )
 
-        search = request.query_params.get("search")
+        search = request.query_params.get(
+            "search"
+        )
 
         if search:
             sales = sales.filter(
-                Q(student_number__iexact=search)
-                | Q(student_name__icontains=search)
+                Q(
+                    student__admission_number__iexact=search
+                )
+                | Q(
+                    student__firstname__icontains=search
+                )
+                | Q(
+                    student__middlename__icontains=search
+                )
+                | Q(
+                    student__surname__icontains=search
+                )
+                | Q(
+                    student_number__iexact=search
+                )
+                | Q(
+                    student_name__icontains=search
+                )
             )
-        date_value = request.query_params.get("date")
-        date_from = request.query_params.get("date_from")
-        date_to = request.query_params.get("date_to")
+
+        date_value = request.query_params.get(
+            "date"
+        )
+
+        date_from = request.query_params.get(
+            "date_from"
+        )
+
+        date_to = request.query_params.get(
+            "date_to"
+        )
 
         if date_value:
             try:
@@ -41,7 +76,10 @@ class SaleListCreateView(APIView):
                 ).date()
             except ValueError:
                 return APIResponse.error(
-                    message="Invalid date. Use YYYY-MM-DD.",
+                    message=(
+                        "Invalid date. "
+                        "Use YYYY-MM-DD."
+                    ),
                     status_code=400,
                 )
 
@@ -58,7 +96,10 @@ class SaleListCreateView(APIView):
                     ).date()
                 except ValueError:
                     return APIResponse.error(
-                        message="Invalid date_from. Use YYYY-MM-DD.",
+                        message=(
+                            "Invalid date_from. "
+                            "Use YYYY-MM-DD."
+                        ),
                         status_code=400,
                     )
 
@@ -74,20 +115,16 @@ class SaleListCreateView(APIView):
                     ).date()
                 except ValueError:
                     return APIResponse.error(
-                        message="Invalid date_to. Use YYYY-MM-DD.",
+                        message=(
+                            "Invalid date_to. "
+                            "Use YYYY-MM-DD."
+                        ),
                         status_code=400,
                     )
 
                 sales = sales.filter(
                     sold_at__date__lte=end_date,
                 )
-        # student_number = request.query_params.get(
-        #     "student_number"
-        # )
-
-        # student_name = request.query_params.get(
-        #     "student_name"
-        # )
 
         payment_status = request.query_params.get(
             "payment_status"
@@ -97,46 +134,24 @@ class SaleListCreateView(APIView):
             "delivery_status"
         )
 
-        # if student_number:
-        #     sales = sales.filter(
-        #         student_number__iexact=student_number
-        #     )
-
-        # if student_name:
-        #     sales = sales.filter(
-        #         student_name__icontains=student_name
-        #     )
-
-        # sales = list(sales)
-
         if payment_status:
             sales = [
                 sale
                 for sale in sales
-                if SaleService.get_payment_status(sale)
-                == payment_status
+                if SaleService.get_payment_status(
+                    sale
+                ) == payment_status
             ]
 
         if delivery_status:
             sales = [
                 sale
                 for sale in sales
-                if SaleService.get_delivery_status(sale)
-                == delivery_status
+                if SaleService.get_delivery_status(
+                    sale
+                ) == delivery_status
             ]
 
-        # if student_number:
-        #     if not sales:
-        #         return APIResponse.error(
-        #             message="Sale not found.",
-        #             status_code=404,
-        #         )
-
-        #     return APIResponse.success(
-        #         data=SaleSerializer(
-        #             sales[0]
-        #         ).data,
-        #     )
         data = CursorPagination.paginate(
             queryset=sales,
             request=request,
@@ -144,7 +159,9 @@ class SaleListCreateView(APIView):
             ordering="-sold_at",
         )
 
-        return APIResponse.success(data=data)
+        return APIResponse.success(
+            data=data
+        )
 
     def post(self, request):
         serializer = SaleSerializer(
@@ -156,12 +173,20 @@ class SaleListCreateView(APIView):
         )
 
         sale = SaleService.create(
-            student_number=serializer.validated_data[
-                "student_number"
-            ],
-            student_name=serializer.validated_data[
-                "student_name"
-            ],
+            student=serializer.validated_data.get(
+                "student"
+            ),
+            student_number=(
+                serializer.validated_data.get(
+                    "student_number"
+                )
+            ),
+            student_name=(
+                serializer.validated_data.get(
+                    "student_name",
+                    "",
+                )
+            ),
             sold_at=serializer.validated_data[
                 "sold_at"
             ],
@@ -173,7 +198,9 @@ class SaleListCreateView(APIView):
 
         return APIResponse.success(
             data=SaleSerializer(sale).data,
-            message="Sale created successfully.",
+            message=(
+                "Sale created successfully."
+            ),
             status_code=201,
         )
 
@@ -184,6 +211,7 @@ class SaleDetailView(APIView):
         try:
             sale = (
                 Sale.objects
+                .select_related("student")
                 .prefetch_related(
                     "lines",
                     "lines__product",
@@ -191,6 +219,7 @@ class SaleDetailView(APIView):
                 )
                 .get(id=sale_id)
             )
+
         except Sale.DoesNotExist:
             return APIResponse.error(
                 message="Sale not found.",
@@ -203,7 +232,10 @@ class SaleDetailView(APIView):
 
     def patch(self, request, sale_id):
         try:
-            sale = Sale.objects.get(id=sale_id)
+            sale = Sale.objects.get(
+                id=sale_id
+            )
+
         except Sale.DoesNotExist:
             return APIResponse.error(
                 message="Sale not found.",
@@ -222,21 +254,30 @@ class SaleDetailView(APIView):
 
         sale = SaleService.update(
             sale=sale,
-            student_name=serializer.validated_data.get(
-                "student_name"
+            student_name=(
+                serializer.validated_data.get(
+                    "student_name"
+                )
             ),
-            sold_at=serializer.validated_data.get(
-                "sold_at"
+            sold_at=(
+                serializer.validated_data.get(
+                    "sold_at"
+                )
             ),
-            notes=serializer.validated_data.get(
-                "notes"
+            notes=(
+                serializer.validated_data.get(
+                    "notes"
+                )
             ),
         )
 
         return APIResponse.success(
             data=SaleSerializer(sale).data,
-            message="Sale updated successfully.",
+            message=(
+                "Sale updated successfully."
+            ),
         )
+
 
 class CompleteSaleView(APIView):
 
@@ -250,11 +291,8 @@ class CompleteSaleView(APIView):
         )
 
         sale = SaleService.create_with_payment(
-            student_number=serializer.validated_data[
-                "student_number"
-            ],
-            student_name=serializer.validated_data[
-                "student_name"
+            student=serializer.validated_data[
+                "student"
             ],
             sold_at=serializer.validated_data[
                 "sold_at"

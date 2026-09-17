@@ -29,6 +29,10 @@ from apps.inventory.views import (
     CompleteSaleView,
     AdditionalPurchaseCreateView,
     TodaysSalesView,
+    StudentListCreateView,
+    StudentDetailView,
+    HouseDetailView,
+    HouseListView,
 )
 
 
@@ -187,6 +191,28 @@ urlpatterns = [
     "student-history/",
         StudentHistoryView.as_view(),
         name="student-history",
+    ),
+
+    # Students
+    path(
+        "students/",
+        StudentListCreateView.as_view(),
+    ),
+
+    path(
+        "students/<uuid:student_id>/",
+        StudentDetailView.as_view(),
+    ),
+
+    # Houses
+    path(
+        "houses/",
+        HouseListView.as_view(),
+    ),
+
+    path(
+        "houses/<uuid:house_id>/",
+        HouseDetailView.as_view(),
     ),
 
 ]

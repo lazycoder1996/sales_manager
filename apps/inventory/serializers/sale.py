@@ -24,6 +24,7 @@ class SaleSerializer(serializers.ModelSerializer):
 
         fields = [
             "id",
+            "student",
             "student_number",
             "student_name",
             "sold_at",
@@ -40,6 +41,7 @@ class SaleSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             "id",
+            "student",
             "total",
             "paid_amount",
             "outstanding_amount",
