@@ -33,6 +33,7 @@ from apps.inventory.views import (
     StudentDetailView,
     HouseDetailView,
     HouseListView,
+    SaleUndeliveryView
 )
 
 
@@ -186,6 +187,11 @@ urlpatterns = [
         name="sale-delivery",
     ),
 
+    path(
+        "sales/<uuid:sale_id>/undeliver/",
+        SaleUndeliveryView.as_view(),
+        name="sale-undeliver",
+    ),
     # History
     path(
     "student-history/",

@@ -91,14 +91,8 @@ class DeliveryService:
             )
         }
 
-        # ---------------------------------------------------------
-        # First pass:
-        # Validate every requested line.
-        # Nothing is changed yet.
-        # ---------------------------------------------------------
-
+        # First pass: validate every requested line.
         requested_by_stock_item = {}
-
         validated_lines = []
 
         for item in lines:
@@ -146,11 +140,7 @@ class DeliveryService:
                 (line, quantity)
             )
 
-        # ---------------------------------------------------------
-        # Second pass:
-        # Check stock availability for every product/variant.
-        # ---------------------------------------------------------
-
+        # Second pass: check stock.
         for (
             product_id,
             product_variant_id,
@@ -172,19 +162,100 @@ class DeliveryService:
                         f"unit(s) available for the "
                         f"requested product/variant, "
                         f"but {requested_quantity} "
-                        f"unit(s) were requested."
+                        f"units were requested."
                     )
                 })
 
-        # ---------------------------------------------------------
-        # Third pass:
-        # All validation passed. Now update the delivery.
-        # ---------------------------------------------------------
-
+        # Third pass: update delivery.
         updated_lines = []
 
         for line, quantity in validated_lines:
             line.delivered_quantity += quantity
+
+            line.save(
+                update_fields=[
+                    "delivered_quantity",
+                    "updated_at",
+                ]
+            )
+
+            updated_lines.append(line)
+
+        return updated_lines
+
+    @staticmethod
+    @transaction.atomic
+    def undeliver(sale, lines):
+        """
+        Reverse previously delivered quantities.
+
+        This does not directly modify stock.
+
+        Stock is derived from:
+            received quantity - delivered quantity
+
+        Therefore reducing delivered_quantity automatically
+        makes that quantity available in stock again.
+        """
+        sale_lines = {
+            str(line.id): line
+            for line in (
+                SaleLine.objects
+                .select_for_update()
+                .filter(sale=sale)
+            )
+        }
+
+        # Combine duplicate line IDs in the request so that
+        # the total reversal cannot accidentally exceed the
+        # delivered quantity.
+        requested_by_line = {}
+
+        for item in lines:
+            line_id = str(item["line_id"])
+            quantity = item["quantity"]
+
+            requested_by_line[line_id] = (
+                requested_by_line.get(
+                    line_id,
+                    0,
+                )
+                + quantity
+            )
+
+        validated_lines = []
+
+        for line_id, quantity in (
+            requested_by_line.items()
+        ):
+            line = sale_lines.get(line_id)
+
+            if line is None:
+                raise serializers.ValidationError({
+                    "line_id": (
+                        "The sale line does not belong "
+                        "to this sale."
+                    )
+                })
+
+            if quantity > line.delivered_quantity:
+                raise serializers.ValidationError({
+                    "quantity": (
+                        f"Only "
+                        f"{line.delivered_quantity} "
+                        f"unit(s) have been delivered "
+                        f"for this sale line."
+                    )
+                })
+
+            validated_lines.append(
+                (line, quantity)
+            )
+
+        updated_lines = []
+
+        for line, quantity in validated_lines:
+            line.delivered_quantity -= quantity
 
             line.save(
                 update_fields=[

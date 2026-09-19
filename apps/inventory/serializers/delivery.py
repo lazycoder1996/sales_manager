@@ -11,3 +11,15 @@ class DeliverySerializer(serializers.Serializer):
         many=True,
         allow_empty=False,
     )
+
+
+class UndeliveryLineSerializer(serializers.Serializer):
+    line_id = serializers.UUIDField()
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class UndeliverySerializer(serializers.Serializer):
+    lines = UndeliveryLineSerializer(
+        many=True,
+        allow_empty=False,
+    )

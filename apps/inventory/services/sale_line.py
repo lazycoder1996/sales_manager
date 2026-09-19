@@ -88,20 +88,15 @@ class SaleLineService:
         product_variant,
         quantity,
     ):
-        SaleLineService._validate_product(
-            product
-        )
+        SaleLineService._validate_product(product)
 
         SaleLineService._validate_product_variant(
             product,
             product_variant,
         )
 
-        # SaleLineService._validate_duplicate(
-        #     sale,
-        #     product,
-        #     product_variant,
-        # )
+        # Duplicate validation currently disabled.
+        # SaleLineService._validate_duplicate(...)
 
         return SaleLine.objects.create(
             sale=sale,
@@ -146,6 +141,51 @@ class SaleLineService:
         line.save(
             update_fields=[
                 "quantity",
+                "updated_at",
+            ]
+        )
+
+        return line
+
+    @staticmethod
+    def update_variant(
+        line,
+        product_variant,
+    ):
+        """
+        Change the variant of an existing sale line.
+
+        A variant can only be changed when nothing from
+        the line has been delivered yet.
+
+        Payment status does not prevent a variant change
+        because the product, quantity, price, and total
+        remain unchanged.
+        """
+        if line.delivered_quantity > 0:
+            raise serializers.ValidationError({
+                "product_variant": (
+                    "The product variant cannot be changed "
+                    "after an item has been delivered. "
+                    "Mark the delivered quantity as "
+                    "undelivered first."
+                )
+            })
+
+        SaleLineService._validate_product(
+            line.product
+        )
+
+        SaleLineService._validate_product_variant(
+            line.product,
+            product_variant,
+        )
+
+        line.product_variant = product_variant
+
+        line.save(
+            update_fields=[
+                "product_variant",
                 "updated_at",
             ]
         )

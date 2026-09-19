@@ -301,10 +301,10 @@ class DashboardService:
             paid_at__date=today,
         )
 
-        total_value = Decimal("0")
+        # total_value = Decimal("0")
 
-        for sale in sales:
-            total_value += SaleService.get_total(sale)
+        # for sale in sales:
+        #     total_value += SaleService.get_total(sale)
 
         cash = (
             payments.aggregate(
@@ -322,7 +322,7 @@ class DashboardService:
         return {
             "date": today,
             "count": sales.count(),
-            "total_value": total_value,
+            "total_value": cash + momo,
             "cash": cash,
             "momo": momo,
             # "sales": sales,

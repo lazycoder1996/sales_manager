@@ -2,46 +2,31 @@ from rest_framework.views import APIView
 
 from apps.core.responses import APIResponse
 from apps.inventory.models import Sale, SaleLine
-from apps.inventory.serializers.sale_line import (
-    SaleLineSerializer,
-)
-from apps.inventory.services.sale_line import (
-    SaleLineService,
-)
+from apps.inventory.serializers.sale_line import SaleLineSerializer
+from apps.inventory.services.sale_line import SaleLineService
 
 
 class SaleLineCreateView(APIView):
 
     def post(self, request, sale_id):
         try:
-            sale = Sale.objects.get(
-                id=sale_id
-            )
+            sale = Sale.objects.get(id=sale_id)
         except Sale.DoesNotExist:
             return APIResponse.error(
                 message="Sale not found.",
                 status_code=404,
             )
 
-        serializer = SaleLineSerializer(
-            data=request.data,
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
+        serializer = SaleLineSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
         line = SaleLineService.create(
             sale=sale,
-            product=serializer.validated_data[
-                "product"
-            ],
+            product=serializer.validated_data["product"],
             product_variant=serializer.validated_data.get(
                 "product_variant"
             ),
-            quantity=serializer.validated_data[
-                "quantity"
-            ],
+            quantity=serializer.validated_data["quantity"],
         )
 
         return APIResponse.success(
@@ -53,12 +38,7 @@ class SaleLineCreateView(APIView):
 
 class SaleLineDetailView(APIView):
 
-    def patch(
-        self,
-        request,
-        sale_id,
-        line_id,
-    ):
+    def patch(self, request, sale_id, line_id):
         try:
             line = (
                 SaleLine.objects
@@ -83,29 +63,28 @@ class SaleLineDetailView(APIView):
             data=request.data,
             partial=True,
         )
+        serializer.is_valid(raise_exception=True)
 
-        serializer.is_valid(
-            raise_exception=True
-        )
+        if "product_variant" in serializer.validated_data:
+            line = SaleLineService.update_variant(
+                line=line,
+                product_variant=serializer.validated_data[
+                    "product_variant"
+                ],
+            )
 
-        line = SaleLineService.update(
-            line=line,
-            quantity=serializer.validated_data[
-                "quantity"
-            ],
-        )
+        if "quantity" in serializer.validated_data:
+            line = SaleLineService.update(
+                line=line,
+                quantity=serializer.validated_data["quantity"],
+            )
 
         return APIResponse.success(
             data=SaleLineSerializer(line).data,
             message="Sale line updated successfully.",
         )
 
-    def delete(
-        self,
-        request,
-        sale_id,
-        line_id,
-    ):
+    def delete(self, request, sale_id, line_id):
         try:
             line = SaleLine.objects.get(
                 id=line_id,
