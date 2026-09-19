@@ -51,9 +51,12 @@ class Student(BaseModel):
 
     residence = models.CharField(
         max_length=255,
+        null=True
     )
 
-    date_of_birth = models.DateField()
+    date_of_birth = models.DateField(
+        null=True
+    )
     is_active = models.BooleanField(
         default=True
     )
@@ -62,6 +65,7 @@ class Student(BaseModel):
         "inventory.House",
         on_delete=models.PROTECT,
         related_name="students",
+        null=True
     )
 
     class Meta:
