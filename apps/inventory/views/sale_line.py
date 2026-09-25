@@ -176,12 +176,12 @@ class SaleLineChangeProductView(APIView):
                         "items"
                     ]
                 ),
-                topup_cash_amount=(
+                cash_amount=(
                     serializer.validated_data.get(
                         "cash_amount"
                     )
                 ),
-                topup_momo_amount=(
+                momo_amount=(
                     serializer.validated_data.get(
                         "momo_amount"
                     )
