@@ -18,6 +18,8 @@ from apps.inventory.views import (
     SaleDetailView,
     SaleLineCreateView,
     SaleLineDetailView,
+    SaleLineChangeProductView,
+    SaleLineReturnView,
     SaleDeliveryView,
     StudentHistoryView,
     StockDetailView,
@@ -33,7 +35,7 @@ from apps.inventory.views import (
     StudentDetailView,
     HouseDetailView,
     HouseListView,
-    SaleUndeliveryView
+    SaleUndeliveryView,
 )
 
 
@@ -66,12 +68,12 @@ urlpatterns = [
         SellerPaymentListCreateView.as_view(),
         name="seller-payment-list-create",
     ),
-
     path(
         "seller-payments/<uuid:payment_id>/",
         SellerPaymentDetailView.as_view(),
         name="seller-payment-detail",
     ),
+
     # Products
     path(
         "products/",
@@ -167,6 +169,16 @@ urlpatterns = [
         SaleLineDetailView.as_view(),
         name="sale-line-detail",
     ),
+    path(
+        "sales/<uuid:sale_id>/lines/<uuid:line_id>/change-product/",
+        SaleLineChangeProductView.as_view(),
+        name="sale-line-change-product",
+    ),
+    path(
+        "sales/<uuid:sale_id>/lines/<uuid:line_id>/return/",
+        SaleLineReturnView.as_view(),
+        name="sale-line-return",
+    ),
 
     # Payments
     path(
@@ -186,15 +198,15 @@ urlpatterns = [
         SaleDeliveryView.as_view(),
         name="sale-delivery",
     ),
-
     path(
         "sales/<uuid:sale_id>/undeliver/",
         SaleUndeliveryView.as_view(),
         name="sale-undeliver",
     ),
+
     # History
     path(
-    "student-history/",
+        "student-history/",
         StudentHistoryView.as_view(),
         name="student-history",
     ),
@@ -204,7 +216,6 @@ urlpatterns = [
         "students/",
         StudentListCreateView.as_view(),
     ),
-
     path(
         "students/<uuid:student_id>/",
         StudentDetailView.as_view(),
@@ -215,10 +226,8 @@ urlpatterns = [
         "houses/",
         HouseListView.as_view(),
     ),
-
     path(
         "houses/<uuid:house_id>/",
         HouseDetailView.as_view(),
     ),
-
 ]

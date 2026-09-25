@@ -48,6 +48,19 @@ class DeliveryService:
         product_id,
         product_variant_id,
     ):
+        """
+        Physical stock available for delivery.
+
+        Available stock is:
+
+            total received
+            - total physically delivered
+
+        Sale quantities that have not yet been delivered do
+        not reduce physical stock because they are only
+        allocations/commitments.
+        """
+
         received = (
             StockReceiptLine.objects
             .filter(
@@ -91,14 +104,35 @@ class DeliveryService:
             )
         }
 
-        # First pass: validate every requested line.
-        requested_by_stock_item = {}
-        validated_lines = []
+        # ---------------------------------------------------------
+        # First pass:
+        # Combine duplicate line IDs from the request.
+        # ---------------------------------------------------------
+
+        requested_by_line = {}
 
         for item in lines:
             line_id = str(item["line_id"])
             quantity = item["quantity"]
 
+            requested_by_line[line_id] = (
+                requested_by_line.get(
+                    line_id,
+                    0,
+                )
+                + quantity
+            )
+
+        # ---------------------------------------------------------
+        # Second pass:
+        # Validate sale-line quantities and group physical
+        # stock requirements by product + variant.
+        # ---------------------------------------------------------
+
+        requested_by_stock_item = {}
+        validated_lines = []
+
+        for line_id, quantity in requested_by_line.items():
             line = sale_lines.get(line_id)
 
             if line is None:
@@ -140,7 +174,11 @@ class DeliveryService:
                 (line, quantity)
             )
 
-        # Second pass: check stock.
+        # ---------------------------------------------------------
+        # Third pass:
+        # Check actual physical stock.
+        # ---------------------------------------------------------
+
         for (
             product_id,
             product_variant_id,
@@ -166,7 +204,11 @@ class DeliveryService:
                     )
                 })
 
-        # Third pass: update delivery.
+        # ---------------------------------------------------------
+        # Fourth pass:
+        # Actually deliver the items.
+        # ---------------------------------------------------------
+
         updated_lines = []
 
         for line, quantity in validated_lines:
@@ -191,12 +233,14 @@ class DeliveryService:
 
         This does not directly modify stock.
 
-        Stock is derived from:
+        Physical stock is derived from:
+
             received quantity - delivered quantity
 
-        Therefore reducing delivered_quantity automatically
-        makes that quantity available in stock again.
+        Therefore reducing delivered_quantity makes those
+        physical units available for delivery again.
         """
+
         sale_lines = {
             str(line.id): line
             for line in (
@@ -206,9 +250,10 @@ class DeliveryService:
             )
         }
 
-        # Combine duplicate line IDs in the request so that
-        # the total reversal cannot accidentally exceed the
-        # delivered quantity.
+        # ---------------------------------------------------------
+        # Combine duplicate line IDs.
+        # ---------------------------------------------------------
+
         requested_by_line = {}
 
         for item in lines:
@@ -224,6 +269,10 @@ class DeliveryService:
             )
 
         validated_lines = []
+
+        # ---------------------------------------------------------
+        # Validate reversal quantities.
+        # ---------------------------------------------------------
 
         for line_id, quantity in (
             requested_by_line.items()
@@ -251,6 +300,10 @@ class DeliveryService:
             validated_lines.append(
                 (line, quantity)
             )
+
+        # ---------------------------------------------------------
+        # Reverse delivery.
+        # ---------------------------------------------------------
 
         updated_lines = []
 

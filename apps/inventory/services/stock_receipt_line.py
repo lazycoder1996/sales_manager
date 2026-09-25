@@ -1,6 +1,12 @@
-from apps.inventory.models import StockReceiptLine
-
+from django.db import transaction
 from rest_framework import serializers
+
+from apps.inventory.models import Product
+from apps.inventory.models import ProductVariant
+from apps.inventory.models import StockReceiptLine
+from apps.inventory.services.stock_allocation import (
+    StockAllocationService,
+)
 
 
 class StockReceiptLineService:
@@ -8,52 +14,39 @@ class StockReceiptLineService:
     @staticmethod
     def _validate_product(product):
         if not product.is_active:
-            raise serializers.ValidationError({
-                "product": "The selected product is inactive."
-            })
+            raise serializers.ValidationError(
+                "Product is inactive."
+            )
 
     @staticmethod
-    def _validate_product_variant(
-        product,
-        product_variant,
-    ):
+    def _validate_product_variant(product, product_variant):
         active_variants = product.variants.filter(
             is_active=True,
         )
 
-        if active_variants.exists():
-            if product_variant is None:
-                raise serializers.ValidationError({
-                    "product_variant": (
-                        "A variant is required for this product."
-                    )
-                })
-        else:
-            if product_variant is not None:
-                raise serializers.ValidationError({
-                    "product_variant": (
-                        "This product does not have "
-                        "an active variant."
-                    )
-                })
+        if active_variants.exists() and product_variant is None:
+            raise serializers.ValidationError(
+                "A variant is required for this product."
+            )
+
+        if not active_variants.exists() and product_variant is not None:
+            raise serializers.ValidationError(
+                "This product does not have variants."
+            )
 
         if product_variant is not None:
             if product_variant.product_id != product.id:
-                raise serializers.ValidationError({
-                    "product_variant": (
-                        "The selected product variant "
-                        "does not belong to the selected product."
-                    )
-                })
+                raise serializers.ValidationError(
+                    "The selected variant does not belong to the selected product."
+                )
 
             if not product_variant.is_active:
-                raise serializers.ValidationError({
-                    "product_variant": (
-                        "The selected variant is inactive."
-                    )
-                })
+                raise serializers.ValidationError(
+                    "Product variant is inactive."
+                )
 
     @staticmethod
+    @transaction.atomic
     def create(
         stock_receipt,
         product,
@@ -67,7 +60,7 @@ class StockReceiptLineService:
             product_variant,
         )
 
-        return StockReceiptLine.objects.create(
+        line = StockReceiptLine.objects.create(
             stock_receipt=stock_receipt,
             product=product,
             product_variant=product_variant,
@@ -75,7 +68,13 @@ class StockReceiptLineService:
             unit_cost=product.cost_price,
         )
 
+        # Newly received stock can satisfy previously unallocated sales.
+        StockAllocationService.allocate_receipt_line(line)
+
+        return line
+
     @staticmethod
+    @transaction.atomic
     def update(
         line,
         product=None,
@@ -85,71 +84,106 @@ class StockReceiptLineService:
         update_product_variant=False,
         update_quantity=False,
     ):
-        if quantity is not None and quantity < 1:
-            raise serializers.ValidationError({
-                "quantity": "Quantity must be greater than zero."
-            })
+        current_product = line.product
+        current_variant = line.product_variant
+        current_quantity = line.quantity
+
+        final_product = (
+            product
+            if update_product
+            else current_product
+        )
+
+        final_variant = (
+            product_variant
+            if update_product_variant
+            else current_variant
+        )
 
         if update_product:
             StockReceiptLineService._validate_product(
-                product
+                final_product,
             )
 
         if update_product or update_product_variant:
-            final_product = (
-                product
-                if update_product
-                else line.product
-            )
-
-            final_product_variant = (
-                product_variant
-                if update_product_variant
-                else line.product_variant
-            )
-
             StockReceiptLineService._validate_product_variant(
                 final_product,
-                final_product_variant,
+                final_variant,
             )
 
-        if update_product:
-            line.product = product
+        allocated_quantity = (
+            StockAllocationService
+            .get_receipt_line_allocated_quantity(line)
+        )
 
-            # Re-snapshot the cost when the product changes.
-            line.unit_cost = product.cost_price
+        # Product/variant cannot change once any units from this
+        # receipt line have been allocated to a sale.
+        if (
+            (update_product or update_product_variant)
+            and allocated_quantity > 0
+        ):
+            raise serializers.ValidationError(
+                "Product or variant cannot be changed because stock from "
+                "this receipt line has already been allocated to a sale."
+            )
+
+        if update_quantity:
+            if quantity is None or quantity < 1:
+                raise serializers.ValidationError(
+                    "Quantity must be greater than zero."
+                )
+
+            # Never allow the physical receipt quantity to become
+            # smaller than the quantity already allocated to sales.
+            if quantity < allocated_quantity:
+                raise serializers.ValidationError(
+                    f"Quantity cannot be reduced below {allocated_quantity} "
+                    "because {allocated_quantity} unit(s) have already "
+                    "been allocated to sales."
+                )
+
+        if update_product:
+            line.product = final_product
+
+            # Cost is a snapshot of the product cost when the receipt
+            # line is created/changed before allocation.
+            line.unit_cost = final_product.cost_price
 
         if update_product_variant:
-            line.product_variant = product_variant
+            line.product_variant = final_variant
 
         if update_quantity:
             line.quantity = quantity
 
-        update_fields = []
-
-        if update_product:
-            update_fields.extend([
+        line.save(
+            update_fields=[
                 "product",
+                "product_variant",
+                "quantity",
                 "unit_cost",
-            ])
+                "updated_at",
+            ],
+        )
 
-        if update_product_variant:
-            update_fields.append(
-                "product_variant"
-            )
-
-        if update_quantity:
-            update_fields.append("quantity")
-
-        if update_fields:
-            update_fields.append("updated_at")
-
-            line.save(
-                update_fields=update_fields,
-            )
+        # If quantity increased, the newly available stock can now
+        # be allocated to the oldest unallocated sales.
+        if update_quantity and quantity > current_quantity:
+            StockAllocationService.allocate_receipt_line(line)
 
         return line
 
     @staticmethod
+    @transaction.atomic
     def delete(line):
+        allocated_quantity = (
+            StockAllocationService
+            .get_receipt_line_allocated_quantity(line)
+        )
+
+        if allocated_quantity > 0:
+            raise serializers.ValidationError(
+                "This receipt line cannot be deleted because "
+                "some of its stock has already been allocated to sales."
+            )
+
         line.delete()
