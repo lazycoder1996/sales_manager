@@ -1,35 +1,85 @@
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import DecimalField
+from django.db.models import F
 from django.db.models import Sum
 from rest_framework import serializers
 
+from apps.inventory.models import SaleLine
 from apps.inventory.models import SellerPayment
-from apps.inventory.services.stock_allocation import (
-    StockAllocationService,
-)
+from apps.inventory.models.stock_receipt_line import StockReceiptLine
 
 
 class SellerPaymentService:
 
     @staticmethod
+    def get_seller_product_ids(seller):
+        """
+        Return the distinct product IDs that belong to this seller.
+
+        A seller's products are determined from the products supplied
+        through the seller's stock receipt lines.
+        """
+
+        return (
+            StockReceiptLine.objects
+            .filter(
+                stock_receipt__seller=seller,
+            )
+            .values("product_id")
+            .distinct()
+        )
+
+    @staticmethod
     def get_seller_total_owed(seller):
         """
-        Total amount currently owed to the seller based on sold units
-        allocated to this seller's stock receipt layers.
+        Calculate the total amount currently owed to the seller.
 
-        Stock that has merely been received is NOT owed yet.
+        Seller ownership is determined by the distinct products that
+        appear on the seller's stock receipt lines.
+
+        Owed amount is based on sold quantities only:
+
+            sale_line.quantity × sale_line.unit_cost
+
+        Delivered quantity, physical stock, and stock allocations
+        do not affect seller accounting.
         """
 
-        return StockAllocationService.get_seller_total_owed(
-            seller,
+        product_ids = (
+            SellerPaymentService
+            .get_seller_product_ids(seller)
+        )
+
+        return (
+            SaleLine.objects
+            .filter(
+                product_id__in=product_ids,
+            )
+            .aggregate(
+                total=Sum(
+                    F("quantity") * F("unit_cost"),
+                    output_field=DecimalField(
+                        max_digits=12,
+                        decimal_places=2,
+                    ),
+                ),
+            )["total"]
+            or Decimal("0.00")
         )
 
     @staticmethod
     def get_seller_total_paid(seller):
+        """
+        Return the total amount paid to the seller.
+        """
+
         return (
             SellerPayment.objects
-            .filter(seller=seller)
+            .filter(
+                seller=seller,
+            )
             .aggregate(
                 total=Sum("amount"),
             )["total"]
@@ -38,6 +88,12 @@ class SellerPaymentService:
 
     @staticmethod
     def get_seller_outstanding(seller):
+        """
+        Calculate the seller's outstanding balance.
+
+        outstanding = total owed - total paid
+        """
+
         owed = (
             SellerPaymentService
             .get_seller_total_owed(seller)

@@ -1,6 +1,8 @@
 from django.db import transaction
+from django.db.models import Sum
 from rest_framework import serializers
 
+from apps.inventory.models import SaleLine
 from apps.inventory.models import StockReceipt
 from apps.inventory.services.stock_receipt_line import (
     StockReceiptLineService,
@@ -34,11 +36,47 @@ class StockReceiptService:
             StockReceiptLineService.create(
                 stock_receipt=receipt,
                 product=line_data["product"],
-                product_variant=line_data.get("product_variant"),
+                product_variant=line_data.get(
+                    "product_variant",
+                ),
                 quantity=line_data["quantity"],
             )
 
         return receipt
+
+    @staticmethod
+    def _receipt_products_have_sales(receipt):
+        """
+        Determine whether any product supplied by this receipt
+        has already appeared on a sale.
+
+        Seller ownership is now determined from:
+
+            seller
+                ↓
+            stock receipt lines
+                ↓
+            product IDs
+                ↓
+            sale lines
+
+        Therefore changing the seller of a receipt after one of
+        its products has been sold could change historical seller
+        accounting.
+
+        We prevent that change once a product from the receipt
+        has appeared on a sale.
+        """
+
+        product_ids = (
+            receipt.lines
+            .values("product_id")
+            .distinct()
+        )
+
+        return SaleLine.objects.filter(
+            product_id__in=product_ids,
+        ).exists()
 
     @staticmethod
     @transaction.atomic
@@ -50,36 +88,54 @@ class StockReceiptService:
         notes=None,
         lines=None,
     ):
-        # A receipt's seller cannot be changed once any stock from
-        # the receipt has been allocated to sales.
-        if seller is not None and seller != receipt.seller:
-            has_allocated_stock = receipt.lines.filter(
-                sale_allocations__isnull=False,
-            ).exists()
+        locked_receipt = (
+            StockReceipt.objects
+            .select_for_update()
+            .get(pk=receipt.pk)
+        )
 
-            if has_allocated_stock:
-                raise serializers.ValidationError(
-                    "Seller cannot be changed because stock from "
-                    "this receipt has already been allocated to sales."
-                )
+        # ---------------------------------------------------------
+        # Seller
+        # ---------------------------------------------------------
 
+        if (
+            seller is not None
+            and seller != locked_receipt.seller
+        ):
             if not seller.is_active:
                 raise serializers.ValidationError(
                     "Seller is inactive."
                 )
 
-            receipt.seller = seller
+            if StockReceiptService._receipt_products_have_sales(
+                locked_receipt,
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "seller": (
+                            "Seller cannot be changed because "
+                            "a product from this receipt has "
+                            "already been sold."
+                        )
+                    }
+                )
+
+            locked_receipt.seller = seller
+
+        # ---------------------------------------------------------
+        # Other receipt fields
+        # ---------------------------------------------------------
 
         if source is not None:
-            receipt.source = source
+            locked_receipt.source = source
 
         if received_at is not None:
-            receipt.received_at = received_at
+            locked_receipt.received_at = received_at
 
         if notes is not None:
-            receipt.notes = notes
+            locked_receipt.notes = notes
 
-        receipt.save(
+        locked_receipt.save(
             update_fields=[
                 "seller",
                 "source",
@@ -89,38 +145,63 @@ class StockReceiptService:
             ],
         )
 
+        # ---------------------------------------------------------
+        # Receipt lines
+        # ---------------------------------------------------------
+
         if lines is not None:
             for line_data in lines:
                 line_id = line_data.get("id")
+
                 should_delete = line_data.get(
                     "_delete",
                     False,
                 )
 
+                # -------------------------------------------------
                 # Delete existing line.
+                # -------------------------------------------------
+
                 if should_delete:
-                    line = receipt.lines.filter(
-                        id=line_id,
-                    ).first()
+                    if not line_id:
+                        raise serializers.ValidationError(
+                            "A receipt line ID is required "
+                            "when deleting a line."
+                        )
+
+                    line = (
+                        locked_receipt.lines
+                        .filter(id=line_id)
+                        .first()
+                    )
 
                     if line is None:
                         raise serializers.ValidationError(
-                            f"Stock receipt line {line_id} was not found."
+                            f"Stock receipt line {line_id} "
+                            "was not found."
                         )
 
-                    StockReceiptLineService.delete(line)
+                    StockReceiptLineService.delete(
+                        line,
+                    )
 
                     continue
 
+                # -------------------------------------------------
                 # Update existing line.
+                # -------------------------------------------------
+
                 if line_id:
-                    line = receipt.lines.filter(
-                        id=line_id,
-                    ).first()
+                    line = (
+                        locked_receipt.lines
+                        .filter(id=line_id)
+                        .first()
+                    )
 
                     if line is None:
                         raise serializers.ValidationError(
-                            f"Stock receipt line {line_id} was not found."
+                            f"Stock receipt line {line_id} "
+                            "was not found."
                         )
 
                     StockReceiptLineService.update(
@@ -137,16 +218,23 @@ class StockReceiptService:
                             "quantity",
                             line.quantity,
                         ),
-                        update_product="product" in line_data,
+                        update_product=(
+                            "product" in line_data
+                        ),
                         update_product_variant=(
                             "product_variant" in line_data
                         ),
-                        update_quantity="quantity" in line_data,
+                        update_quantity=(
+                            "quantity" in line_data
+                        ),
                     )
 
                     continue
 
+                # -------------------------------------------------
                 # Create new line.
+                # -------------------------------------------------
+
                 if "product" not in line_data:
                     raise serializers.ValidationError(
                         "Product is required for a new receipt line."
@@ -158,7 +246,7 @@ class StockReceiptService:
                     )
 
                 StockReceiptLineService.create(
-                    stock_receipt=receipt,
+                    stock_receipt=locked_receipt,
                     product=line_data["product"],
                     product_variant=line_data.get(
                         "product_variant",
@@ -166,4 +254,4 @@ class StockReceiptService:
                     quantity=line_data["quantity"],
                 )
 
-        return receipt
+        return locked_receipt

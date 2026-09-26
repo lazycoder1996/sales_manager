@@ -4,9 +4,6 @@ from django.db import transaction
 from rest_framework import serializers
 
 from apps.inventory.models import SaleLine
-from apps.inventory.services.stock_allocation import (
-    StockAllocationService,
-)
 
 
 class SaleLineService:
@@ -174,10 +171,6 @@ class SaleLineService:
                 ],
             )
 
-            StockAllocationService.allocate_sale_line(
-                existing_line,
-            )
-
             return existing_line
 
         line = SaleLine.objects.create(
@@ -188,10 +181,6 @@ class SaleLineService:
             delivered_quantity=0,
             unit_price=product.selling_price,
             unit_cost=product.cost_price,
-        )
-
-        StockAllocationService.allocate_sale_line(
-            line
         )
 
         return line
@@ -247,10 +236,6 @@ class SaleLineService:
                 ],
             )
 
-            StockAllocationService.allocate_sale_line(
-                locked_line,
-            )
-
             return locked_line
 
         reduction_quantity = abs(
@@ -265,11 +250,6 @@ class SaleLineService:
         SaleLineService._adjust_payment(
             sale=locked_line.sale,
             difference=-difference,
-        )
-
-        StockAllocationService.reduce_sale_line_allocations(
-            sale_line=locked_line,
-            quantity=reduction_quantity,
         )
 
         locked_line.quantity = quantity
@@ -331,10 +311,6 @@ class SaleLineService:
                 "This product and variant already exists on the sale."
             )
 
-        StockAllocationService.clear_sale_line_allocations(
-            locked_line
-        )
-
         locked_line.product_variant = product_variant
 
         locked_line.save(
@@ -342,10 +318,6 @@ class SaleLineService:
                 "product_variant",
                 "updated_at",
             ],
-        )
-
-        StockAllocationService.allocate_sale_line(
-            locked_line
         )
 
         return locked_line
@@ -372,10 +344,6 @@ class SaleLineService:
         SaleLineService._adjust_payment(
             sale=locked_line.sale,
             difference=-refund,
-        )
-
-        StockAllocationService.clear_sale_line_allocations(
-            locked_line
         )
 
         locked_line.delete()
@@ -446,11 +414,6 @@ class SaleLineService:
             momo_amount=momo_amount,
         )
 
-        StockAllocationService.reduce_sale_line_allocations(
-            sale_line=locked_line,
-            quantity=return_quantity,
-        )
-
         delivered_to_remove = min(
             locked_line.delivered_quantity,
             return_quantity,
@@ -460,10 +423,6 @@ class SaleLineService:
         locked_line.delivered_quantity -= delivered_to_remove
 
         if locked_line.quantity <= 0:
-            StockAllocationService.clear_sale_line_allocations(
-                locked_line
-            )
-
             locked_line.delete()
         else:
             locked_line.save(
@@ -502,10 +461,6 @@ class SaleLineService:
                     ],
                 )
 
-                StockAllocationService.allocate_sale_line(
-                    replacement_line
-                )
-
                 created_lines.append(
                     replacement_line
                 )
@@ -520,10 +475,6 @@ class SaleLineService:
                 delivered_quantity=0,
                 unit_price=product.selling_price,
                 unit_cost=product.cost_price,
-            )
-
-            StockAllocationService.allocate_sale_line(
-                replacement_line
             )
 
             created_lines.append(
@@ -564,21 +515,12 @@ class SaleLineService:
             difference=-refund,
         )
 
-        StockAllocationService.reduce_sale_line_allocations(
-            sale_line=locked_line,
-            quantity=return_quantity,
-        )
-
         delivered_to_remove = min(
             locked_line.delivered_quantity,
             return_quantity,
         )
 
         if return_quantity == locked_line.quantity:
-            StockAllocationService.clear_sale_line_allocations(
-                locked_line
-            )
-
             locked_line.delete()
 
             return

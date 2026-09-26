@@ -14,7 +14,6 @@ from .dashboard import *
 from .additional_purchase import *
 from .student import *
 from .house import *
-from .stock_allocation import *
 
 __all__ = [
     "ProductService",

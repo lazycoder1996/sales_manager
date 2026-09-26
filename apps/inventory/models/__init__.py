@@ -7,10 +7,8 @@ from .sale_line import SaleLine
 from .payment import Payment
 from .seller import *
 from .seller_payment import *
-from .seller_payment_allocation import *
 from .house import *
 from .student import *
-from .sale_line_stock_allocation import *
 
 __all__ = [
     "Product",
